@@ -1,0 +1,245 @@
+<pre>
+  BIP: XXX
+  Layer: Applications
+  Title: Crypto Open Exchange Protocol (COX)
+  Author: Nicolas Dorier <nicolas.dorier@gmail.com>
+  Comments-Summary: No comments yet.
+  Comments-URI: https://github.com/bitcoin/bips/wiki/Comments:BIP-XXX
+  Status: Draft
+  Type: Standards Track
+  Created: 2017-12-20
+  License: BSD-3-Clause
+           CC0-1.0
+</pre>
+
+==Abstract==
+
+A simple protocol that allows merchants to decouple payment processor solutions from exchanges while mitigating exchange rate risks.   The protocol supports both onchain and Lightning Network payments.
+
+==Motivation==
+
+Cryptocurrency merchant adoption is mainly driven by availability, ease of use and means of acceptance.
+We call such solutions `Payment Processors`.
+
+Until now, payment processing solutions fall into one of the two following categories:
+
+# Self-hosted with the customer paying in cryptocurrency and the merchant receiving it directly.
+# Centralized, coupled with an exchange feature, with the customer paying in cryptocurrency to the merchant, and receiving fiat or cryptocurrency on his exchange account.
+
+The self-hosted solution has two issues:
+
+# The merchant becomes vulnerable to the wild volatility of cryptocurrencies.
+# If the merchant does not pay suppliers in crypto, it is wasteful of blockchain space as a second transaction is needed to send to the exchange,
+
+The centralized solution has two issues:
+
+# It locks-in the merchant to a particular payment processor whose intentions might not be aligned (e.g. Bitpay who tried to redefine Bitcoin as being a different chain, without merchant approval)
+# It has to deal with local regulations (e.g. Bitpay does not provide fiat CAD to canadian merchants)
+
+The goal of this BIP is to specify a simple protocol which makes possible decoupling of payment processors from exchanges so the merchant gets the flexibility of a self-hosted solutions with the volatility mitigation benefits of a centralized solution
+
+We believe this BIP will gather a lot of interest among local exchanges which do not have the resources to develop their own payment solutions.
+
+Their customers can decide which payment processor solution they prefer, while the exchanges give them a way to protect against cryptocurrency volatility.
+
+==Summary==
+
+The Crypto Open Exchange Protocol (COX) provides a standard way for exchanges to publish exchange rate information, to facilitate incoming deposits to exchanges, and to hedhe automatically sell cryptocurrencies for fiat.     This allows the payment processor to present accurately denominated cryptocurrency invoices, confirm that a payment was received, and minimize exchange risk by converting the payment quickly.  
+
+The protocol enables the customer to deposit into the merchant’s exchange account directly allowing Payment Processor to leverage the exchange’s bitcoin infrastructure and avoid fees associated with extra transactions.
+
+For onchain payments, the exchange generates the receiving address and payments sent to that address are credited to the merchant’s exchange account.  Lightning Network (LN) payments could be handled in the same way.  
+
+For merchants who prefer to maintain their own wallets/coin infrastructure, COX allows them to mitigate the exchange risk by initiating sell orders when funds are received.  For merchants using LN channels, this allows them to move out of cryptocurrency without closing the channel.   
+
+The protocol is works with onchain payments as well as.   In both cases, the exchange generates the receiving address 
+
+Two LN configurations are accounted for in the design: 
+1.	The merchant leverages the exchange’s LN channel. The merchant does not have to maintain their own LN channel or bitcoin infrastructure.
+2.	The merchant opens their own LN channel and their self-hosted Payment Processor creates LN invoices directly.   The merchant would control their own wallet and would use COXS to sell crypto as needed to mitigate exchange rate risk.  The exchange may or may not operate a LN node.
+
+===Setup===
+
+The merchant log in to its exchange website, go into "Address sources" section of it, an click on "Create a new address source".
+
+The address source creation wizard asks him questions about what to do when crypto currency is sent to this the address source. (Cryptocurrency, Market sell order, limit order of past day average etc...).  The merchant would specify whether the exchange will provide onchain or LN addresses.
+
+The wizard will also request webhook information so the exchange can notify the payment processor when a payment is made and when it is confirmed.
+
+The merchant receives an "address source URI" which they can input inside the payment processor.
+
+An exchange compatible with the Crypto Open Exchange Protocol would reply to any HTTP POST request to this  "address source URI" returning the following information (more details in the Specification part)
+
+# A deposit address for accepting a payment.  This address will be uniquely generated for each POST request.
+# The current rate
+# Optional: If the exchange is willing to take the risk of rate fluctuation, until when this rate is guaranteed and under which conditions.
+
+<img src="bip-xxx/overview.png"></img>
+
+===Case I: Onchain payments=== 
+
+In this case the merchant’s payment process queries the exchange to get current rate information and a destination address.   The exchange notifies the payment processor when payment is received.  The exchange converts the bitcoin according to rules setup during the configuration.
+
+The setup:
+
+* Manny (the "merchant") wants to accept Bitcoin payments on his e-commerce website.
+* Manny chooses the payment processor "PROCCO" which has a powerful plugin for his e-commerce website.
+* Manny is based in Canada and already has an account on the exchange "MYCOIN" which supports the Crypto Open Exchange Protocol.
+* Manny connects to the exchange website, and creates a new address source.
+* In the configuration screen of the address source, for each payment sent to this address source, Manny decides to keep 30% in Bitcoin and place a market sell order for the remaining 70% of the amount.
+* Manny provides "PROCCO's" webhook endpoint that so "PROCCO" is notified when payments have been made and confirmed. 
+* "MYCOIN" creates the address source, and gives the "address source URI" to the merchant. (e.g. https://example.com/addresssources/abd29ddn92)
+* Manny copies the address source URI and goes inside "PROCCO" settings, and configures his store to use this address source URI.
+
+Now a customer, Carol, wants to order a brand new phone for $500 CAD on Manny's store and decides to pay in Bitcoin.
+
+* The E-Commerce website plugin requests the creation of an invoice from PROCCO. 
+* PROCCO queries the "address source URI" and retrieves the rate, the expiration of this rate and conditions.
+* PROCCO can now show the Bitcoin Payment Checkout page.
+* Carla pays.  MYCOIN sees the payment in the mempool and notifies PROCCO that a payment has been made via the webhook.
+* PROCCO updates the invoice to acknowledge that a payment has been sent.  
+* MYCOIN, under its own policy (typically after 6 confirmations), credits Manny's account of 0.01 BTC and simultaneously creates a market sell order of 0.007 BTC on behalf of Manny.   MYCOIN notifies PROCCO that the payment was confirmed and finalized via the webhook.
+* PROCCO marks the payment as paid/finalized.   Manny sees the order has been paid and processes the order as usual.
+
+===Case II: Merchant uses exchange’s Lightning Network=== 
+
+In this case, the Payment Processor requests a LN address from the exchange.  The exchange keeps the Payment Processor up-to-date on payment status and sells the funds as configured.
+
+The steps are identical to Case I except LN addresses are sent instead of Bitcoin.
+
+===Case III: Merchant uses their own Lightning Network===
+
+In this case, the Merchant receives payments via their own LN channels.   COX is used to mitigate exchange risk by initiating sell orders on the merchant’s exchange account.  The exchange may offer the merchant the ability to short bitcoin so as they accumulate bitcoin in their channel their overall position remains the same.
+
+The setup would be generally the same as Case I, except the configuration might take the merchant through the selection of costs and reasonable limits to ensure the merchant understands the risks and bounds them.   The setup of this case would primarily take place on the payment processor side as that side would determine when and how much selling of bitcoin will occur.
+
+Now a customer, Carol, wants to order a brand new phone for $500 CAD on Manny's store and decides to pay in Bitcoin.
+
+* The E-Commerce website plugin requests the creation of an invoice from PROCCO.
+* PROCCO queries the "address source URI" and retrieves the rate, the expiration of this rate and conditions.
+* PROCCO generates a LN invoice on Payment Checkout page.
+* Carla pays.  PROCCO marks the payment as paid/finalized. Manny sees the order has been paid and processes the order as usual.
+* PROCCO sends a API request to sell the same amount of bitcoin to MYCOIN
+* Manny’s exposure to cryptocurrency price fluctuations has not increased despite receiving payments in bitcoin.
+
+Atlernatively, if the exchange is also on the lightning network, the merchant can continue to run their own channel and use COX to initiate a LN transfer to the exchange in a manner identical to Case II.   This may be preferable to the process above as it eliminiates the need for a margin account.
+
+
+==Specification==
+
+The payment processor sends a POST request to the "address source URI". 
+
+If the address source provides LN addresses then the amount is required.
+    {
+        "amount": 500.00,
+        "currencyCode":"CAD",
+    }
+
+
+The response from a Crypto Open Exchange Protocol exchange would be:
+
+If the exchange does not guarantee the rate:
+
+    {
+        "depositAddress" : "13....abd",
+        "currencyCode" : "CAD",
+        "cryptoCurrencyCode" : "BTC",
+        "rate" : "15600",
+        "validUntil" : timestamp,   # for LN only
+        "cryptoAmount": 0.1, #for LN only
+        # When the merchant account get credited on the exchange
+        "requiredConfirmations" : blockcount   #for onchain only
+    }
+
+
+If the exchange guarantees the rate:
+
+  {
+        "depositAddress" : "13....abd",
+        "currencyCode" : "CAD",
+        "cryptoCurrencyCode" : "BTC",
+        "rate" : "15600",
+        "validUntil" : timestamp,   # for LN only
+        "cryptoAmount": 0.1, #for LN only
+        "requiredConfirmations" : blockcount,
+        "conditions" : 
+     {
+            # When the transaction should be seen on the blockchain to guarantee the rate
+            "receivedBefore" : timestamp,
+            # When the transaction should be confirmed on the blockchain to guarantee the rate
+            "confirmedBefore" : timestamp
+     }     
+  }
+
+
+For onchain payments the exchange will send an update when the payment hits the mempool.  The exchange sends the following POST to the processor's webhook URI:
+
+  {
+        "depositAddress" : "13....abd",
+        "cryptoAmountReceived" : "0.01",
+        "receivedTimestamp" : timestamp,
+        "rateGuaranteedInEffect" : "false",
+        # When exchange provided a guaranteed rate and the conditions were not met
+        "conditionFailure" : "Received after window"
+  }
+
+
+When the payment is considered confirmed or a LN payment is received, the exchange sends the following POST to the processor's webhook URI:
+
+  {
+        "depositAddress" : "13....abd",
+        "currencyCode" : "CAD",
+        "cryptoCurrencyCode" : "BTC",
+        "rateReceived" : "15600",
+        "cryptoAmountReceived" : "0.01",
+        "receivedTimestamp" : timestamp,
+        "confirmedTimestamp" : timestamp,
+        # When exchange provided a guaranteed rate
+        "guaranteedRateReceived" : "false",
+        # When exchange provided a guaranteed rate and the conditions were not met
+        "conditionFailure" : "Received after window"
+  }
+
+The payment processor will use the postback information to determine if the invoice is paid and to alert the merchant and customer to any issues (e.g. if the payment amount is wrong, it was sent/confirmed too late, etc).
+
+In the case where the payment is received on the merchant’s LN channel, the Payment Processor has the ability to initiate a sell order on the exchange to limit the merchant's overall cryptocurrency risk.   During the initial setup of this capability, it would be desirable for the exchange to allow the merchant to configure the sell endpoint with limits that protect against abuse.   Limits on the number of sell orders, the maximum per order and per day, and a maximum order rate (per hour) are parameters merchants would readily know and help limit the damage that can be done either by erros in the Payment Processor or by hackers. 
+
+The Payment Processor sends a POST sell request to the "address source URI".
+
+    {
+        "requestType" : "sell.order"
+        "cryptoCurrencyCode" : "BTC",
+        "amount": 0.10,
+        "orderType": "limit", #defined by exchange
+        "limitPrice": 9000.00 #defined by exchange, in this example currency is predefined when the endpoint is configured  
+    }
+
+The exchange would respond as to whether order is placed:
+
+    {
+        "id": "ABC123",           
+        "description": "order.received",
+        "status":"submitted"
+    }
+
+The exchange would then update the Payment Processor when the order is executed or updated via a postback:
+
+    {
+        "id": "ABC123",
+        "description": "order.updated",
+        "status":"complete",
+        "price":9001.23,     
+        "amount":0.10    #depending on the exchange rules, partial sales may be possible
+    }
+
+==Note on adoption==
+
+While local exchanges have incentives to implement this simple protocol, it is not strictly needed.
+
+An alternative is to develop an adapter server which expose Crypto Open Exchange Protocol endpoint and connect to underlying exchange's API.
+
+The only downside is that the rate can't be guaranteed.
+
+==Copyright==
+
+This document is dual licensed as BSD 3-clause, and Creative Commons CC0 1.0 Universal.
