@@ -223,26 +223,7 @@ To prevent this, the sender can agree to pay more fee so the receiver make sure 
 
 When a sender pick a specific fee rate, the sender expects the transaction to be confirmed after a specific amount of time. But if the receiver adds an input without bumping the fee of the transaction, the payjoin transaction fee rate will be lower, and thus, longer to confirm.
 
-Our recommendation for <code>maxadditionalfeecontribution=</code> is <code>originalPSBTFeeRate * vsize(sender_input_type)</code>.
-
-{| class="wikitable"
-!sender_input_type
-!vsize(sender_input_type)
-|-
-|P2WPKH
-|68
-|-
-|P2PKH
-|148
-|-
-|P2SH-P2WPKH
-|91
-|-
-|P2TR
-|58
-|}
-
-
+Our recommendation for <code>maxadditionalfeecontribution=</code> is <code>originalPSBTFeeRate * 110</code>.
 
 ===Receiver's original PSBT checklist===
 
@@ -556,7 +537,7 @@ public async Task<PSBT> RequestPayjoin(
         if (isOriginalOutput || substitutedOutput)
         {
             originalOutputs.Dequeue();
-            if (output.OriginalTxOut == feeOutput)
+            if (originalOutput.OriginalTxOut == feeOutput)
             {
                 var actualContribution = feeOutput.Value - proposedPSBTOutput.Value;
                 // The amount that was subtracted from the output's value is less than or equal to maxadditionalfeecontribution
@@ -566,9 +547,10 @@ public async Task<PSBT> RequestPayjoin(
                 if (actualContribution > additionalFee)
                     throw new PayjoinSenderException("The actual contribution is not only paying fee");
                 // Make sure the actual contribution is only paying for fee incurred by additional inputs
+                // This assumes an additional input can be up to 110 bytes.
                 int additionalInputsCount = proposalGlobalTx.Inputs.Count - originalGlobalTx.Inputs.Count;
-                if (additionalInputsCount <= 0)
-                    throw new PayjoinSenderException("Our additional contribution is not paying for additional inputs");
+                if (actualContribution > originalFeeRate * 110 * additionalInputsCount)
+                    throw new PayjoinSenderException("The actual contribution is not only paying for additional inputs");
             }
             else if (allowOutputSubstitution && output.OriginalTxOut.ScriptPubKey == paymentScriptPubKey)
             {
@@ -600,21 +582,6 @@ public async Task<PSBT> RequestPayjoin(
     // After signing this proposal, we should check if minfeerate is respected.
     Log("payjoin proposal filled with sender's information" + proposal);
     return proposal;
-}
-
-int GetVirtualSize(ScriptPubKeyType? scriptPubKeyType)
-{
-    switch (scriptPubKeyType)
-    {
-        case ScriptPubKeyType.Legacy:
-            return 148;
-        case ScriptPubKeyType.Segwit:
-            return 68;
-        case ScriptPubKeyType.SegwitP2SH:
-            return 91;
-        default:
-            return 110;
-    }
 }
 
 // Finalize the signedPSBT and remove confidential information
